@@ -71,6 +71,7 @@ class Session(
   private val numRetainedStatements = livyConf.getInt(RSCConf.Entry.RETAINED_STATEMENTS)
 
   private val _statements = new JLinkedHashMap[Int, Statement] {
+    // 如果size超过配置，则清除最早的运行信息
     protected override def removeEldestEntry(eldest: Entry[Int, Statement]): Boolean = {
       size() > numRetainedStatements
     }
@@ -99,6 +100,7 @@ class Session(
         require(entries != null,
           "SparkEntries should not be null when lazily initialize other interpreters.")
 
+        // 如果所需要执行的类型不存在，则创建相应的Interpreter
         val interp = kind match {
           case Spark =>
             // This should never be touched here.
@@ -124,6 +126,7 @@ class Session(
 
       // Always start SparkInterpreter after beginning, because we rely on SparkInterpreter to
       // initialize SparkContext and create SparkEntries.
+      // 启动一个sparkInterpreter，内部创建了sparkContext、SQLContext、HiveContext等并封装在SparkEntries中
       val sparkInterp = mockSparkInterpreter.getOrElse(new SparkInterpreter(sparkConf))
       sparkInterp.start()
 
@@ -165,6 +168,7 @@ class Session(
       statement.compareAndTransit(StatementState.Waiting, StatementState.Running)
 
       if (statement.state.get() == StatementState.Running) {
+        // 先取得interpreter，再executeCode
         statement.output = executeCode(interpreter(tpe), statementId, code)
       }
 

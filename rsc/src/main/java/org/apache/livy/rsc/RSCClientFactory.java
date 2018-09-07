@@ -68,6 +68,7 @@ public final class RSCClientFactory implements LivyClientFactory {
         info = createContextInfo(uri);
       } else {
         needsServer = true;
+        // 这里创建了基于netty的RpcServer
         ref(lconf);
         DriverProcessInfo processInfo = ContextLauncher.create(this, lconf);
         info = processInfo.getContextInfo();
@@ -91,10 +92,11 @@ public final class RSCClientFactory implements LivyClientFactory {
       refCount.incrementAndGet();
       return;
     }
-
+    // server全局只有一个
     Utils.checkState(server == null, "Server already running but ref count is 0.");
     if (server == null) {
       try {
+        // 基于netty
         server = new RpcServer(config);
       } catch (InterruptedException ie) {
         throw Utils.propagate(ie);

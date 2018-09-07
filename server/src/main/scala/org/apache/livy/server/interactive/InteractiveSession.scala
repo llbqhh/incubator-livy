@@ -74,10 +74,13 @@ object InteractiveSession extends Logging {
       mockClient: Option[RSCClient] = None): InteractiveSession = {
     val appTag = s"livy-session-$id-${Random.alphanumeric.take(8).mkString}"
 
+    // 首先创建一个RSCClient
     val client = mockClient.orElse {
+      // 创建spark conf
       val conf = SparkApp.prepareSparkConf(appTag, livyConf, prepareConf(
         request.conf, request.jars, request.files, request.archives, request.pyFiles, livyConf))
 
+      // 加载各种所需配置，比如pysaprk zip包位置，hive-site配置等
       val builderProperties = prepareBuilderProp(conf, request.kind, livyConf)
 
       val userOpts: Map[String, Option[String]] = Map(
@@ -94,12 +97,14 @@ object InteractiveSession extends Logging {
         opt.foreach { value => builderProperties.put(key, value) }
       }
 
+      // 如果不指定spark.app.name,则默认创建
       builderProperties.getOrElseUpdate("spark.app.name", s"livy-session-$id")
 
       info(s"Creating Interactive session $id: [owner: $owner, request: $request]")
       val builder = new LivyClientBuilder()
         .setAll(builderProperties.asJava)
         .setConf("livy.client.session-id", id.toString)
+        // 指定driver类
         .setConf(RSCConf.Entry.DRIVER_CLASS.key(), "org.apache.livy.repl.ReplDriver")
         .setConf(RSCConf.Entry.PROXY_USER.key(), proxyUser.orNull)
         .setURI(new URI("rsc:/"))
@@ -157,6 +162,7 @@ object InteractiveSession extends Logging {
     val builderProperties = mutable.Map[String, String]()
     builderProperties ++= conf
 
+    // 需要取得repl相关jar包，默认试用LIVY_HOME中的jar包
     def livyJars(livyConf: LivyConf, scalaVersion: String): List[String] = {
       Option(livyConf.get(LivyConf.REPL_JARS)).map { jars =>
         val regex = """[\w-]+_(\d\.\d\d).*\.jar""".r
@@ -177,6 +183,7 @@ object InteractiveSession extends Logging {
       }
     }
 
+    // 取得sparkR的相关包
     def findSparkRArchive(): Option[String] = {
       Option(livyConf.get(RSCConf.Entry.SPARKR_PACKAGE.key())).orElse {
         sys.env.get("SPARK_HOME").flatMap { case sparkHome =>
@@ -249,6 +256,7 @@ object InteractiveSession extends Logging {
       }
     }
 
+    // 找到pyspark的相关包
     def findPySparkArchives(): Seq[String] = {
       Option(livyConf.get(RSCConf.Entry.PYSPARK_ARCHIVES))
         .map(_.split(",").toSeq)

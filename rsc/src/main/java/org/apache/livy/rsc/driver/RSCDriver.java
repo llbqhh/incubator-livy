@@ -97,6 +97,7 @@ public class RSCDriver extends BaseProtocol {
 
   public RSCDriver(SparkConf conf, RSCConf livyConf) throws Exception {
     Set<PosixFilePermission> perms = PosixFilePermissions.fromString("rwx------");
+    // 创建只有自己有权限的临时文件
     this.localTmpDir = Files.createTempDirectory("rsc-tmp",
       PosixFilePermissions.asFileAttribute(perms)).toFile();
     this.executor = Executors.newCachedThreadPool();
@@ -180,6 +181,7 @@ public class RSCDriver extends BaseProtocol {
 
     // Bring up the RpcServer an register the secret provided by the Livy server as a client.
     LOG.info("Starting RPC server...");
+    // driver端创建一个rpcServer
     this.server = new RpcServer(livyConf);
     server.registerClient(clientId, secret, new RpcServer.ClientCallback() {
       @Override
@@ -195,9 +197,11 @@ public class RSCDriver extends BaseProtocol {
     });
 
     // The RPC library takes care of timing out this.
+    // 创建一个连接client的Rpc
     Rpc callbackRpc = Rpc.createClient(livyConf, server.getEventLoopGroup(),
       launcherAddress, launcherPort, clientId, secret, this).get();
     try {
+      // 连接client端，通知driver信息
       callbackRpc.call(new RemoteDriverAddress(server.getAddress(), server.getPort())).get(
         livyConf.getTimeAsMs(RPC_CLIENT_HANDSHAKE_TIMEOUT), TimeUnit.MILLISECONDS);
     } catch (TimeoutException te) {
@@ -328,8 +332,10 @@ public class RSCDriver extends BaseProtocol {
     Thread.currentThread().setContextClassLoader(driverClassLoader);
 
     try {
+      // 启动driver端的server，并连接client端
       initializeServer();
 
+      // 启动sparkSession等
       SparkEntries entries = initializeSparkEntries();
       synchronized (jcLock) {
         jc = new JobContextImpl(entries, localTmpDir, this);

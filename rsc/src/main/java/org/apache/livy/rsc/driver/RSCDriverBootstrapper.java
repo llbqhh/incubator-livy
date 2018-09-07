@@ -47,6 +47,7 @@ public final class RSCDriverBootstrapper {
       break;
 
     case 1:
+      // 测试时，直接从临时文件中读取配置参数
       props = new Properties();
       File propertyFile = new File(args[0]);
       String fileName = propertyFile.getName();

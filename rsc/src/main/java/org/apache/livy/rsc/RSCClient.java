@@ -55,9 +55,11 @@ public class RSCClient implements LivyClient {
   private final Promise<ContextInfo> contextInfoPromise;
   private final Map<String, JobHandleImpl<?>> jobs;
   private final ClientProtocol protocol;
+  // 连接driver端的rpc
   private final Promise<Rpc> driverRpc;
   private final int executorGroupId;
   private final EventLoopGroup eventLoopGroup;
+  // server端的连接方式
   private final Promise<URI> serverUriPromise;
 
   private ContextInfo contextInfo;
@@ -78,6 +80,7 @@ public class RSCClient implements LivyClient {
         Utils.newDaemonThreadFactory("RSCClient-" + executorGroupId + "-%d"));
     this.serverUriPromise = ImmediateEventExecutor.INSTANCE.newPromise();
 
+    // 一旦获得driver端的ContextInfo，则连接driver，并生成对driver端的rpc
     Utils.addListener(this.contextInfoPromise, new FutureListener<ContextInfo>() {
       @Override
       public void onSuccess(ContextInfo info) throws Exception {
@@ -119,6 +122,7 @@ public class RSCClient implements LivyClient {
       Utils.addListener(promise, new FutureListener<Rpc>() {
         @Override
         public void onSuccess(Rpc rpc) throws Exception {
+          // driver端的rpc
           driverRpc.setSuccess(rpc);
           Utils.addListener(rpc.getChannel().closeFuture(), new FutureListener<Void>() {
             @Override
@@ -155,6 +159,7 @@ public class RSCClient implements LivyClient {
 
   private <T> io.netty.util.concurrent.Future<T> deferredCall(final Object msg,
       final Class<T> retType) {
+    // rpc请求，操作driver中的session
     if (driverRpc.isSuccess()) {
       try {
         return driverRpc.get().call(msg, retType);

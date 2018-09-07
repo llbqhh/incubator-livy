@@ -59,6 +59,7 @@ object Session {
       return Map()
     }
 
+    // config黑名单只是判断了传入的参数中的配置
     val errors = conf.keySet.filter(configBlackList.contains)
     if (errors.nonEmpty) {
       throw new IllegalArgumentException(

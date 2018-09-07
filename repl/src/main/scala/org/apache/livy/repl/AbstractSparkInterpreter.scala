@@ -65,6 +65,7 @@ abstract class AbstractSparkInterpreter extends Interpreter with Logging {
     entries = new SparkEntries(conf)
 
     if (isSparkSessionPresent()) {
+      // 这里初始化了sparkSession
       bind("spark",
         sparkEntries.sparkSession().getClass.getCanonicalName,
         sparkEntries.sparkSession(),

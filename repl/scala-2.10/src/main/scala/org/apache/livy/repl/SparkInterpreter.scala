@@ -104,6 +104,7 @@ class SparkInterpreter(protected override val conf: SparkConf) extends AbstractS
         }
       }
 
+      // 调到AbstractSparkInterpreter的postStart方法
       postStart()
     }
   }

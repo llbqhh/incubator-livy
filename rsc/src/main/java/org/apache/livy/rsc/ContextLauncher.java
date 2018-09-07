@@ -87,16 +87,19 @@ class ContextLauncher {
   private ContextLauncher(RSCClientFactory factory, RSCConf conf) throws IOException {
     this.promise = factory.getServer().getEventLoopGroup().next().newPromise();
     this.clientId = UUID.randomUUID().toString();
+    // client的RpcServer创建secret
     this.secret = factory.getServer().createSecret();
     this.conf = conf;
     this.factory = factory;
 
+    // driver向client端注册driver的远程信息
     final RegistrationHandler handler = new RegistrationHandler();
     try {
       factory.getServer().registerClient(clientId, secret, handler);
       String replMode = conf.get("repl");
       boolean repl = replMode != null && replMode.equals("true");
 
+      // 将client端的rpc连接方式存入conf中
       conf.set(LAUNCHER_ADDRESS, factory.getServer().getAddress());
       conf.set(LAUNCHER_PORT, factory.getServer().getPort());
       conf.set(CLIENT_ID, clientId);
@@ -217,6 +220,7 @@ class ContextLauncher {
       };
       return new ChildProcess(conf, promise, child, confFile);
     } else {
+      // 正常情况下会走到这里，创建一个sparkLauncher
       final SparkLauncher launcher = new SparkLauncher();
 
       // Spark 1.x does not support specifying deploy mode in conf and needs special handling.
@@ -226,14 +230,18 @@ class ContextLauncher {
       }
 
       launcher.setSparkHome(System.getenv(SPARK_HOME_ENV));
+      // TODO sdandalone模式会报错
       launcher.setAppResource("spark-internal");
+      // 设置conf临时文件
       launcher.setPropertiesFile(confFile.getAbsolutePath());
+      // 启动的类是RSCDriverBootstrapper
       launcher.setMainClass(RSCDriverBootstrapper.class.getName());
 
       if (conf.get(PROXY_USER) != null) {
         launcher.addSparkArg("--proxy-user", conf.get(PROXY_USER));
       }
 
+      // 最终调用了spark-submit
       return new ChildProcess(conf, promise, launcher.launch(), confFile);
     }
   }
@@ -328,6 +336,7 @@ class ContextLauncher {
 
     private void handle(ChannelHandlerContext ctx, RemoteDriverAddress msg) {
       ContextInfo info = new ContextInfo(msg.host, msg.port, clientId, secret);
+      // 当driver连接client端时，得到ContextInfo
       if (promise.trySuccess(info)) {
         timeout.cancel(true);
         LOG.debug("Received driver info for client {}: {}/{}.", client.getChannel(),
@@ -431,6 +440,7 @@ class ContextLauncher {
           try {
             task.run();
           } finally {
+            // 最后删除之前创建的conf文件
             confFile.delete();
           }
         }
