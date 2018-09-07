@@ -69,7 +69,9 @@ object BatchSession extends Logging {
           request.conf, request.jars, request.files, request.archives, request.pyFiles, livyConf))
       require(request.file != null, "File is required.")
 
+      // 创建SparkProcessBuilder
       val builder = new SparkProcessBuilder(livyConf)
+      // 传入spark配置
       builder.conf(conf)
 
       proxyUser.foreach(builder.proxyUser)
@@ -85,26 +87,33 @@ object BatchSession extends Logging {
       // Spark 1.x does not support specifying deploy mode in conf and needs special handling.
       livyConf.sparkDeployMode().foreach(builder.deployMode)
 
+      // 存储状态
       sessionStore.save(BatchSession.RECOVERY_SESSION_TYPE, s.recoveryMetadata)
 
       builder.redirectOutput(Redirect.PIPE)
       builder.redirectErrorStream(true)
 
       val file = resolveURIs(Seq(request.file), livyConf)(0)
+      // 启动processBuilder，并且包装在LineBufferedProcess中
       val sparkSubmit = builder.start(Some(file), request.args)
 
+      // 启动线程监控子进程执行情况
       Utils.startDaemonThread(s"batch-session-process-$id") {
+        // 记录启动的线程数
         childProcesses.incrementAndGet()
         try {
+          // 等待程序执行结束
           sparkSubmit.waitFor() match {
             case 0 =>
             case exitCode =>
               warn(s"spark-submit exited with code $exitCode")
           }
         } finally {
+          // 减去启动线程数
           childProcesses.decrementAndGet()
         }
       }
+      // 生成一个SparkYarnApp或SparkProcApp,用来监控作业运行状态，杀死作业等
       SparkApp.create(appTag, None, Option(sparkSubmit), livyConf, Option(s))
     }
 

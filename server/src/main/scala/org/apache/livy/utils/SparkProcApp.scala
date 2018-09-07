@@ -21,7 +21,7 @@ import org.apache.livy.{Logging, Utils}
 
 /**
  * Provide a class to control a Spark application using spark-submit.
- *
+ * spark-submit方式提交的作业监控比较简单，直接监控process进程即可
  * @param process The spark-submit process launched the Spark application.
  */
 class SparkProcApp (

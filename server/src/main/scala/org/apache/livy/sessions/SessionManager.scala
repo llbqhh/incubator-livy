@@ -56,6 +56,8 @@ class InteractiveSessionManager(
     mockSessions)
   with SessionHeartbeatWatchdog[InteractiveSession, InteractiveRecoveryMetadata]
   {
+    // 这里开启一个线程监控session是否心跳正常，不正常的也杀掉
+    // 在用户调用livy的api时，会更新session的心跳
     start()
   }
 
@@ -80,7 +82,9 @@ class SessionManager[S <: Session, R <: RecoveryMetadata : ClassTag](
   private[this] final val sessionStateRetainedInSec =
     TimeUnit.MILLISECONDS.toNanos(livyConf.getTimeAsMs(LivyConf.SESSION_STATE_RETAIN_TIME))
 
+  // 恢复session
   mockSessions.getOrElse(recover()).foreach(register)
+  // 启动垃圾回收线程
   new GarbageCollector().start()
 
   def nextId(): Int = synchronized {
@@ -135,14 +139,17 @@ class SessionManager[S <: Session, R <: RecoveryMetadata : ClassTag](
     def expired(session: Session): Boolean = {
       session.state match {
         case s: FinishedSessionState =>
+          // 如果是已经完成的，则在规定时间后删除它的信息
           val currentTime = System.nanoTime()
           currentTime - s.time > sessionStateRetainedInSec
         case _ =>
           if (!sessionTimeoutCheck) {
             false
           } else if (session.isInstanceOf[BatchSession]) {
+            // batch的不管
             false
           } else {
+            // 如果是交互式的，则判断上次执行脚本的时间到现在是否超过贵的时间，超过的删除
             val currentTime = System.nanoTime()
             currentTime - session.lastActivity > sessionTimeout
           }

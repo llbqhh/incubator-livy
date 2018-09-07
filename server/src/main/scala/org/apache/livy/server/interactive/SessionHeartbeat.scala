@@ -52,6 +52,7 @@ trait SessionHeartbeat {
   * Servlet can mixin this trait to update session's heartbeat
   * whenever a /sessions/:id REST call is made. e.g. GET /sessions/:id
   * Note: GET /sessions doesn't update heartbeats.
+  * 在用户调用livy的api时，会更新session的心跳
   */
 trait SessionHeartbeatNotifier[S <: Session with SessionHeartbeat, R <: RecoveryMetadata]
   extends SessionServlet[S, R] {
@@ -64,6 +65,7 @@ trait SessionHeartbeatNotifier[S <: Session with SessionHeartbeat, R <: Recovery
   }
 
   abstract override protected def withViewAccessSession(fn: (S => Any)): Any = {
+    // 请求过来时，先检验权限，再更新心跳，最后执行函数
     super.withViewAccessSession { s =>
       s.heartbeat()
       fn(s)

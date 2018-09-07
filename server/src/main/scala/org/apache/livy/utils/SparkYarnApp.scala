@@ -70,11 +70,15 @@ object SparkYarnApp extends Logging {
   private val leakedAppsGCThread = new Thread() {
     override def run(): Unit = {
       while (true) {
+        // 有两种情况会造成leakedAppTags不为空，1是spark submit提交作业失败，2是在规定时间内没能从yarn申请到足够的资源
+        // 所以对应到下面清除的时候也有两种情况，一种是根本没起来，一种是后来资源充裕了，把该application启动起来了
         if (!leakedAppTags.isEmpty) {
           // kill the app if found it and remove it if exceeding a threshold
           val iter = leakedAppTags.entrySet().iterator()
           var isRemoved = false
           val now = System.currentTimeMillis()
+          // 取得所有spark类型的应用（如果是和其他服务共享的集群，这样也会取到其他服务的应用）
+          // TODO 需要更加细粒度
           val apps = yarnClient.getApplications(appType).asScala
           while(iter.hasNext) {
             val entry = iter.next()
@@ -232,6 +236,7 @@ class SparkYarnApp private[utils] (
   // Exposed for unit test.
   // TODO Instead of spawning a thread for every session, create a centralized thread and
   // batch YARN queries.
+  // 启动线程监控yarn作业执行状态
   private[utils] val yarnAppMonitorThread = Utils.startDaemonThread(s"yarnAppMonitorThread-$this") {
     try {
       // If appId is not known, query YARN by appTag to get it.

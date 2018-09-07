@@ -46,7 +46,7 @@ import org.apache.livy.utils.SparkYarnApp
 class LivyServer extends Logging {
 
   import LivyConf._
-
+  // 内部是Jetty
   private var server: WebServer = _
   private var _serverUrl: Option[String] = None
   // make livyConf accessible for testing
@@ -58,6 +58,7 @@ class LivyServer extends Logging {
 
   def start(): Unit = {
     livyConf = new LivyConf().loadFromFile("livy.conf")
+    // 权限检查服务
     accessManager = new AccessManager(livyConf)
 
     val host = livyConf.get(SERVER_HOST)
@@ -90,6 +91,7 @@ class LivyServer extends Logging {
     livyConf.set(LIVY_SPARK_SCALA_VERSION.key,
       sparkScalaVersion(formattedSparkVersion, scalaVersionFromSparkSubmit, livyConf))
 
+    // 如果开启了security，则试用kinit进行kerberos鉴权，并且每隔一小时做一次鉴权
     if (UserGroupInformation.isSecurityEnabled) {
       // If Hadoop security is enabled, run kinit periodically. runKinit() should be called
       // before any Hadoop operation, otherwise Kerberos exception will be thrown.
@@ -117,6 +119,7 @@ class LivyServer extends Logging {
       startKinitThread(launch_keytab, launch_principal)
     }
 
+    // recovery暂时只支持yarn模式
     testRecovery(livyConf)
 
     // Initialize YarnClient ASAP to save time.
@@ -125,14 +128,18 @@ class LivyServer extends Logging {
       Future { SparkYarnApp.yarnClient }
     }
 
+    // 初始化stateStore和sessionStore，用于服务重启时回复session，默认关闭
     StateStore.init(livyConf)
     val sessionStore = new SessionStore(livyConf)
+    // 批量的Session(batch) Manager
     val batchSessionManager = new BatchSessionManager(livyConf, sessionStore)
+    // 交互的Session Manager
     val interactiveSessionManager = new InteractiveSessionManager(livyConf, sessionStore)
 
     server = new WebServer(livyConf, host, port)
     server.context.setResourceBase("src/main/org/apache/livy/server")
 
+    // 用于在ui页面显示版本等信息
     val livyVersionServlet = new JsonServlet {
       before() { contentType = "application/json" }
 
@@ -149,6 +156,7 @@ class LivyServer extends Logging {
     // Servlet for hosting static files such as html, css, and js
     // Necessary since Jetty cannot set it's resource base inside a jar
     // Returns 404 if the file does not exist
+    // 用于静态页面
     val staticResourceServlet = new ScalatraServlet {
       get("/*") {
         val fileName = params("splat")
@@ -171,6 +179,7 @@ class LivyServer extends Logging {
       }
     }
 
+    // 初始化页面配置
     server.context.addEventListener(
       new ServletContextListener() with MetricsBootstrap with ServletApiImplicits {
 
@@ -189,10 +198,12 @@ class LivyServer extends Logging {
             val context = sce.getServletContext()
             context.initParameters(org.scalatra.EnvironmentKey) = livyConf.get(ENVIRONMENT)
 
+            // 交互式
             val interactiveServlet = new InteractiveSessionServlet(
               interactiveSessionManager, sessionStore, livyConf, accessManager)
             mount(context, interactiveServlet, "/sessions/*")
 
+            // 批量式
             val batchServlet =
               new BatchSessionServlet(batchSessionManager, sessionStore, livyConf, accessManager)
             mount(context, batchServlet, "/batches/*")
@@ -218,6 +229,7 @@ class LivyServer extends Logging {
 
       })
 
+    // 增加安全校验的filter
     livyConf.get(AUTH_TYPE) match {
       case authType @ KerberosAuthenticationHandler.TYPE =>
         val principal = SecurityUtil.getServerPrincipal(livyConf.get(AUTH_KERBEROS_PRINCIPAL),
@@ -244,18 +256,21 @@ class LivyServer extends Logging {
         throw new IllegalArgumentException(s"Invalid auth type: $other")
     }
 
+    // 是否开启跨域请求攻击的保护
     if (livyConf.getBoolean(CSRF_PROTECTION)) {
       info("CSRF protection is enabled.")
       val csrfHolder = new FilterHolder(new CsrfFilter())
       server.context.addFilter(csrfHolder, "/*", EnumSet.allOf(classOf[DispatcherType]))
     }
 
+    // 是否需要权限校验
     if (accessManager.isAccessControlOn) {
       info("Access control is enabled")
       val accessHolder = new FilterHolder(new AccessFilter(accessManager))
       server.context.addFilter(accessHolder, "/*", EnumSet.allOf(classOf[DispatcherType]))
     }
 
+    // 启动服务
     server.start()
 
     Runtime.getRuntime().addShutdownHook(new Thread("Livy Server Shutdown") {

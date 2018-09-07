@@ -129,10 +129,12 @@ abstract class SessionServlet[S <: Session, R <: RecoveryMetadata](
     if (tooManySessions) {
       BadRequest("Rejected, too many sessions are being created!")
     } else {
+      // 创建session(batch的或者interactive的)并注册到sessionManager中
       val session = sessionManager.register(createSession(request))
       // Because it may take some time to establish the session, update the last activity
       // time before returning the session info to the client.
       session.recordActivity()
+      // 返回显示给调用方的session视图
       Created(clientSessionView(session, request),
         headers = Map("Location" ->
           (getRequestPathInfo(request) + url(getSession, "id" -> session.id.toString))))
@@ -183,6 +185,7 @@ abstract class SessionServlet[S <: Session, R <: RecoveryMetadata](
    */
   protected def hasViewAccess(target: String, req: HttpServletRequest): Boolean = {
     val user = remoteUser(req)
+    // 校验权限的方法最终调用了accessManager的相关方法
     user == target || accessManager.checkViewPermissions(user)
   }
 
@@ -191,6 +194,7 @@ abstract class SessionServlet[S <: Session, R <: RecoveryMetadata](
    */
   protected def hasModifyAccess(target: String, req: HttpServletRequest): Boolean = {
     val user = remoteUser(req)
+    // 校验权限的方法最终调用了accessManager的相关方法
     user == target || accessManager.checkModifyPermissions(user)
   }
 
@@ -199,6 +203,7 @@ abstract class SessionServlet[S <: Session, R <: RecoveryMetadata](
    */
   protected def hasSuperAccess(target: String, req: HttpServletRequest): Boolean = {
     val user = remoteUser(req)
+    // 校验权限的方法最终调用了accessManager的相关方法
     user == target || accessManager.checkSuperUser(user)
   }
 
@@ -212,6 +217,7 @@ abstract class SessionServlet[S <: Session, R <: RecoveryMetadata](
   /**
    * Performs an operation on the session, verifying whether the caller has view access of the
    * session.
+    * 校验权限
    */
   protected def withViewAccessSession(fn: (S => Any)): Any =
     doWithSession(fn, false, Some(hasViewAccess))
@@ -226,9 +232,12 @@ abstract class SessionServlet[S <: Session, R <: RecoveryMetadata](
   private def doWithSession(fn: (S => Any),
       allowAll: Boolean,
       checkFn: Option[(String, HttpServletRequest) => Boolean]): Any = {
+    // 取得sessionid
     val sessionId = params("id").toInt
+    // 取得session
     sessionManager.get(sessionId) match {
       case Some(session) =>
+        // 校验权限（checkFn方法）
         if (allowAll || checkFn.map(_(session.owner, request)).getOrElse(false)) {
           fn(session)
         } else {

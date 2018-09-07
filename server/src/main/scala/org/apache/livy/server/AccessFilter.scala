@@ -29,6 +29,7 @@ private[livy] class AccessFilter(accessManager: AccessManager) extends Filter {
                         chain: FilterChain): Unit = {
     val httpRequest = request.asInstanceOf[HttpServletRequest]
     val remoteUser = httpRequest.getRemoteUser
+    // 查看用户是否有权限试用livy的api
     if (accessManager.isUserAllowed(remoteUser)) {
       chain.doFilter(request, response)
     } else {
